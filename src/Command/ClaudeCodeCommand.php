@@ -43,7 +43,8 @@ final class ClaudeCodeCommand extends Command
             ->addOption('json', 'j', InputOption::VALUE_NONE, 'Request JSON output')
             ->addOption('resume', 'r', InputOption::VALUE_REQUIRED, 'Resume a conversation by session ID')
             ->addOption('continue', 'c', InputOption::VALUE_NONE, 'Continue the last conversation')
-            ->addOption('system-prompt', null, InputOption::VALUE_REQUIRED, 'Set a system prompt');
+            ->addOption('system-prompt', null, InputOption::VALUE_REQUIRED, 'Set a system prompt')
+            ->addOption('api-key', null, InputOption::VALUE_REQUIRED, 'Anthropic API key (uses API auth instead of subscription)');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -83,6 +84,12 @@ final class ClaudeCodeCommand extends Command
         $systemPrompt = $input->getOption('system-prompt');
         if ($systemPrompt !== null) {
             $service = $service->withSystemPrompt($systemPrompt);
+        }
+
+        /** @var string|null $apiKey */
+        $apiKey = $input->getOption('api-key');
+        if ($apiKey !== null) {
+            $service = $service->withApiKey($apiKey);
         }
 
         try {

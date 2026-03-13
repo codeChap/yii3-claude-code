@@ -33,6 +33,9 @@ final class BinaryNotFoundException extends ClaudeCodeException
     public function getSolution(): ?string
     {
         return 'Install the Claude Code CLI (https://docs.anthropic.com/en/docs/claude-code) '
-            . 'or set "binaryPath" in your params under "codechap/yii3-claude-code".';
+            . 'and ensure the "claude" binary is in your PATH, '
+            . 'or set "binaryPath" in your params under "codechap/yii3-claude-code". '
+            . 'Note: when running under a web server, the PATH may differ from your shell — '
+            . 'set an explicit "binaryPath" or use "envSet" to pass the correct PATH/HOME.';
     }
 }

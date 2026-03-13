@@ -11,5 +11,7 @@ return [
         'allowedTools' => [],
         'timeout' => 300,
         'envUnset' => ['CLAUDECODE', 'ANTHROPIC_API_KEY'],
+        'apiKey' => null,
+        'envSet' => [],
     ],
 ];

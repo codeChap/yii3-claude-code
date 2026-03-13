@@ -18,6 +18,8 @@ return [
             'allowedTools' => $params['codechap/yii3-claude-code']['allowedTools'],
             'timeout' => $params['codechap/yii3-claude-code']['timeout'],
             'envUnset' => $params['codechap/yii3-claude-code']['envUnset'],
+            'apiKey' => $params['codechap/yii3-claude-code']['apiKey'],
+            'envSet' => $params['codechap/yii3-claude-code']['envSet'],
         ],
     ],
 ];

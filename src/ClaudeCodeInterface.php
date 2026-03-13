@@ -13,14 +13,25 @@ namespace Codechap\Yii3ClaudeCode;
  * Usage example:
  *
  * ```php
+ * // Subscription-based (default)
  * $response = $claudeCode
  *     ->withModel(Model::Haiku)
  *     ->withJson()
  *     ->query('Summarize this text');
  *
+ * // API key authentication
+ * $response = $claudeCode
+ *     ->withApiKey('sk-ant-...')
+ *     ->query('Hello');
+ *
  * // Multi-turn conversation
  * $r1 = $claudeCode->query('What is the capital of France?');
  * $r2 = $claudeCode->withSessionId($r1->getSessionId())->query('And Germany?');
+ *
+ * // Custom environment variables
+ * $response = $claudeCode
+ *     ->withEnv(['HOME' => '/home/myuser'])
+ *     ->query('Hello');
  * ```
  */
 interface ClaudeCodeInterface
@@ -78,6 +89,36 @@ interface ClaudeCodeInterface
      * Return a new instance configured with a working directory for the claude process.
      */
     public function withWorkingDirectory(string $path): static;
+
+    /**
+     * Return a new instance configured with an Anthropic API key.
+     *
+     * When set, uses API key authentication instead of subscription-based auth.
+     * Pass null to clear the API key and revert to subscription mode.
+     */
+    public function withApiKey(?string $apiKey): static;
+
+    /**
+     * Return a new instance with custom environment variables for the subprocess.
+     *
+     * These are merged into the process environment and take priority over envUnset.
+     * Useful for setting HOME, PATH, or other context the claude binary may need.
+     *
+     * @param array<string, string> $env
+     */
+    public function withEnv(array $env): static;
+
+    /**
+     * Return a new instance with additional CLI flags appended to the command.
+     *
+     * Supports three forms:
+     * - Boolean flags (numeric key): `['--dangerously-skip-permissions']`
+     * - Single-value flags (string key): `['--effort' => 'high']`
+     * - Multi-value flags (string key, array value): `['--add-dir' => ['/path1', '/path2']]`
+     *
+     * @param array<int|string, string|array<string>> $flags
+     */
+    public function withFlags(array $flags): static;
 
     /**
      * Send a prompt to Claude Code CLI and return the response.

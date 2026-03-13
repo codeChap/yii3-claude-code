@@ -12,6 +12,7 @@ use Symfony\Component\Process\Exception\ProcessTimedOutException;
 use Symfony\Component\Process\Process;
 
 use function array_key_exists;
+use function explode;
 use function is_array;
 use function is_file;
 use function is_executable;
@@ -22,15 +23,19 @@ use function microtime;
 use function round;
 use function shell_exec;
 use function sprintf;
+use function str_contains;
 use function str_starts_with;
 use function trim;
 
 /**
  * Claude Code CLI wrapper for Yii3 applications.
  *
- * Executes prompts via the locally installed `claude` binary using a Claude subscription
- * rather than API credits. Supports one-shot queries, multi-turn conversations via
- * `--resume` and `--continue`, JSON mode, and model selection.
+ * Executes prompts via the locally installed `claude` binary. Supports both
+ * subscription-based authentication (default) and API key authentication.
+ * Works on Linux, macOS, and Windows.
+ *
+ * Features: one-shot queries, multi-turn conversations via `--resume` and
+ * `--continue`, JSON mode, model selection, and custom environment variables.
  *
  * All configuration methods are immutable — they return a new instance with the
  * specified setting applied, leaving the original unchanged.
@@ -44,6 +49,11 @@ final class ClaudeCode implements ClaudeCodeInterface
     private array $allowedTools;
     /** @var array<string> */
     private array $envUnset;
+    /** @var array<string, string> */
+    private array $envSet;
+    /** @var array<int|string, string|array<string>> */
+    private array $flags = [];
+    private ?string $apiKey;
     private bool $json = false;
     private ?string $sessionId = null;
     private bool $continue = false;
@@ -57,6 +67,8 @@ final class ClaudeCode implements ClaudeCodeInterface
      * @param array<string> $allowedTools List of tools the CLI is allowed to use.
      * @param int $timeout Process timeout in seconds.
      * @param array<string> $envUnset Environment variables to unset for recursion prevention.
+     * @param string|null $apiKey Anthropic API key. When set, uses API key auth instead of subscription.
+     * @param array<string, string> $envSet Custom environment variables to pass to the subprocess.
      */
     public function __construct(
         private string $binaryPath = '',
@@ -66,10 +78,14 @@ final class ClaudeCode implements ClaudeCodeInterface
         array $allowedTools = [],
         private int $timeout = 300,
         array $envUnset = ['CLAUDECODE', 'ANTHROPIC_API_KEY'],
+        ?string $apiKey = null,
+        array $envSet = [],
     ) {
         $this->model = Model::tryFrom($modelName) ?? Model::Sonnet;
         $this->allowedTools = $allowedTools;
         $this->envUnset = $envUnset;
+        $this->apiKey = $apiKey;
+        $this->envSet = $envSet;
     }
 
     public function withModel(Model $model): static
@@ -139,6 +155,27 @@ final class ClaudeCode implements ClaudeCodeInterface
         return $clone;
     }
 
+    public function withApiKey(?string $apiKey): static
+    {
+        $clone = clone $this;
+        $clone->apiKey = $apiKey;
+        return $clone;
+    }
+
+    public function withEnv(array $env): static
+    {
+        $clone = clone $this;
+        $clone->envSet = $env;
+        return $clone;
+    }
+
+    public function withFlags(array $flags): static
+    {
+        $clone = clone $this;
+        $clone->flags = $flags;
+        return $clone;
+    }
+
     public function query(string $prompt, ?callable $onResponse = null): Response
     {
         $binary = $this->resolveBinaryPath();
@@ -196,6 +233,8 @@ final class ClaudeCode implements ClaudeCodeInterface
     /**
      * Resolve the claude binary path.
      *
+     * Uses `where` on Windows and `which` on Unix-like systems (Linux, macOS).
+     *
      * @throws BinaryNotFoundException If the binary cannot be found.
      */
     private function resolveBinaryPath(): string
@@ -208,13 +247,28 @@ final class ClaudeCode implements ClaudeCodeInterface
         }
 
         /** @psalm-suppress ForbiddenCode Required to locate the claude binary */
-        $path = trim((string) shell_exec('which claude 2>/dev/null'));
+        $path = $this->isWindows()
+            ? trim((string) shell_exec('where claude 2>NUL'))
+            : trim((string) shell_exec('which claude 2>/dev/null'));
+
+        // `where` on Windows may return multiple lines; take the first match.
+        if ($path !== '' && str_contains($path, "\n")) {
+            $path = trim(explode("\n", $path)[0]);
+        }
 
         if ($path === '') {
             throw new BinaryNotFoundException();
         }
 
         return $path;
+    }
+
+    /**
+     * Check if the current platform is Windows.
+     */
+    private function isWindows(): bool
+    {
+        return PHP_OS_FAMILY === 'Windows';
     }
 
     /**
@@ -255,14 +309,37 @@ final class ClaudeCode implements ClaudeCodeInterface
             $args[] = '--continue';
         }
 
+        foreach ($this->flags as $key => $value) {
+            if (is_int($key)) {
+                // Boolean flag: '--dangerously-skip-permissions'
+                /** @var string $value */
+                $args[] = $value;
+            } elseif (is_array($value)) {
+                // Multi-value flag: '--add-dir' => ['/path1', '/path2']
+                $args[] = $key;
+                foreach ($value as $item) {
+                    $args[] = $item;
+                }
+            } else {
+                // Single-value flag: '--effort' => 'high'
+                $args[] = $key;
+                $args[] = $value;
+            }
+        }
+
         return $args;
     }
 
     /**
-     * Build the environment variable overrides with recursion-prevention vars removed.
+     * Build the environment variable overrides.
      *
      * Symfony Process merges these with the inherited parent environment.
      * Setting a value to `false` explicitly unsets it in the child process.
+     *
+     * Priority (highest to lowest):
+     * 1. API key — sets ANTHROPIC_API_KEY, overriding envUnset
+     * 2. Custom envSet values
+     * 3. envUnset values (only applied if not overridden above)
      *
      * @return array<string, string|false>
      */
@@ -271,8 +348,19 @@ final class ClaudeCode implements ClaudeCodeInterface
         /** @var array<string, string|false> $env */
         $env = [];
 
+        // Start with vars to unset.
         foreach ($this->envUnset as $var) {
             $env[$var] = false;
+        }
+
+        // Apply custom env vars (overrides unset if same key).
+        foreach ($this->envSet as $key => $value) {
+            $env[$key] = $value;
+        }
+
+        // API key takes highest priority.
+        if ($this->apiKey !== null) {
+            $env['ANTHROPIC_API_KEY'] = $this->apiKey;
         }
 
         return $env;

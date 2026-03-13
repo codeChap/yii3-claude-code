@@ -144,6 +144,24 @@ final class ClaudeCodeCommandTest extends TestCase
         self::assertSame(0, $tester->getStatusCode());
     }
 
+    public function testApiKeyOptionCallsWithApiKey(): void
+    {
+        $response = new Response('ok', 'ok', null, 0.1, false);
+
+        $mock = $this->createMock(ClaudeCodeInterface::class);
+        $mock->expects(self::once())
+            ->method('withApiKey')
+            ->with('sk-ant-test-key')
+            ->willReturn($mock);
+        $mock->method('query')->willReturn($response);
+
+        $command = new ClaudeCodeCommand($mock);
+        $tester = new CommandTester($command);
+        $tester->execute(['prompt' => 'test', '--api-key' => 'sk-ant-test-key']);
+
+        self::assertSame(0, $tester->getStatusCode());
+    }
+
     public function testSystemPromptOptionCallsWithSystemPrompt(): void
     {
         $response = new Response('ok', 'ok', null, 0.1, false);

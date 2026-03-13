@@ -25,6 +25,9 @@ final class ClaudeCodeTest extends TestCase
         self::assertNotSame($service, $service->withSessionId('abc'));
         self::assertNotSame($service, $service->withContinue());
         self::assertNotSame($service, $service->withWorkingDirectory('/tmp'));
+        self::assertNotSame($service, $service->withApiKey('sk-ant-test'));
+        self::assertNotSame($service, $service->withEnv(['HOME' => '/tmp']));
+        self::assertNotSame($service, $service->withFlags(['--dangerously-skip-permissions']));
     }
 
     public function testWithSessionIdClearsContinue(): void
@@ -55,6 +58,8 @@ final class ClaudeCodeTest extends TestCase
             allowedTools: ['Read', 'Write'],
             timeout: 60,
             envUnset: ['CUSTOM_VAR'],
+            apiKey: 'sk-ant-test-key',
+            envSet: ['HOME' => '/home/deploy'],
         );
 
         self::assertInstanceOf(ClaudeCode::class, $service);
@@ -70,6 +75,64 @@ final class ClaudeCodeTest extends TestCase
     {
         $service = new ClaudeCode(modelName: 'invalid-model');
         self::assertInstanceOf(ClaudeCode::class, $service);
+    }
+
+    public function testWithApiKeyNullClearsKey(): void
+    {
+        $service = new ClaudeCode(apiKey: 'sk-ant-test');
+        $cleared = $service->withApiKey(null);
+
+        self::assertNotSame($service, $cleared);
+        self::assertInstanceOf(ClaudeCode::class, $cleared);
+    }
+
+    public function testWithEnvReturnsNewInstance(): void
+    {
+        $service = new ClaudeCode();
+        $withEnv = $service->withEnv(['HOME' => '/home/deploy', 'PATH' => '/usr/bin']);
+
+        self::assertNotSame($service, $withEnv);
+        self::assertInstanceOf(ClaudeCode::class, $withEnv);
+    }
+
+    public function testWithFlagsBooleanFlag(): void
+    {
+        $service = new ClaudeCode();
+        $withFlags = $service->withFlags(['--dangerously-skip-permissions']);
+
+        self::assertNotSame($service, $withFlags);
+        self::assertInstanceOf(ClaudeCode::class, $withFlags);
+    }
+
+    public function testWithFlagsSingleValueFlag(): void
+    {
+        $service = new ClaudeCode();
+        $withFlags = $service->withFlags(['--effort' => 'high']);
+
+        self::assertNotSame($service, $withFlags);
+        self::assertInstanceOf(ClaudeCode::class, $withFlags);
+    }
+
+    public function testWithFlagsMultiValueFlag(): void
+    {
+        $service = new ClaudeCode();
+        $withFlags = $service->withFlags(['--add-dir' => ['/tmp', '/var']]);
+
+        self::assertNotSame($service, $withFlags);
+        self::assertInstanceOf(ClaudeCode::class, $withFlags);
+    }
+
+    public function testWithFlagsMixedTypes(): void
+    {
+        $service = new ClaudeCode();
+        $withFlags = $service->withFlags([
+            '--dangerously-skip-permissions',
+            '--effort' => 'high',
+            '--add-dir' => ['/tmp', '/var'],
+        ]);
+
+        self::assertNotSame($service, $withFlags);
+        self::assertInstanceOf(ClaudeCode::class, $withFlags);
     }
 
     public function testQueryWithNonExistentBinaryThrows(): void
